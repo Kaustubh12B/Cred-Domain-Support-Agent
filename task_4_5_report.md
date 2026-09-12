@@ -5,7 +5,7 @@
 - Embedding model: `all-MiniLM-L6-v2` (local SentenceTransformer)
 - Answer strategy: `sentence`
 - Chroma distance space: `cosine`; displayed score: `1 - distance`
-- Evaluation retrieval depth: 3 chunks per strategy
+- Evaluation retrieval: all ranked chunks, deduplicated to the first 3 parent document IDs
 
 ## Task 4 threshold calibration
 
@@ -66,12 +66,12 @@ Answer: I don't know based on the knowledge base.
 
 - Query: What affects eligibility for a home loan?
   - Expected parent: `KB-001`
-  - Deduplicated retrieved parents: ['KB-001', 'KB-007']
+  - Deduplicated retrieved parents: ['KB-001', 'KB-007', 'KB-008']
   - Precision@3 = 1/3 = 0.333
   - Recall@3 = 1/1 = 1.000
 - Query: How is my EMI calculated?
   - Expected parent: `KB-002`
-  - Deduplicated retrieved parents: ['KB-002', 'KB-007']
+  - Deduplicated retrieved parents: ['KB-002', 'KB-007', 'KB-009']
   - Precision@3 = 1/3 = 0.333
   - Recall@3 = 1/1 = 1.000
 - Query: Which KYC documents are required?
@@ -86,7 +86,7 @@ Answer: I don't know based on the knowledge base.
   - Recall@3 = 1/1 = 1.000
 - Query: How does joint-account authorization work?
   - Expected parent: `KB-011`
-  - Deduplicated retrieved parents: ['KB-011', 'KB-006']
+  - Deduplicated retrieved parents: ['KB-011', 'KB-006', 'KB-012']
   - Precision@3 = 1/3 = 0.333
   - Recall@3 = 1/1 = 1.000
 - Average Precision@3: 0.333
@@ -96,7 +96,7 @@ Answer: I don't know based on the knowledge base.
 
 - Query: What affects eligibility for a home loan?
   - Expected parent: `KB-001`
-  - Deduplicated retrieved parents: ['KB-001', 'KB-007']
+  - Deduplicated retrieved parents: ['KB-001', 'KB-007', 'KB-008']
   - Precision@3 = 1/3 = 0.333
   - Recall@3 = 1/1 = 1.000
 - Query: How is my EMI calculated?
@@ -124,4 +124,4 @@ Answer: I don't know based on the knowledge base.
 
 ## Deployment recommendation
 
-Recommend the sentence strategy because it achieved the strongest measured document-level result (average Precision@3 0.333, Recall@3 1.000). Keep the calibrated fallback enabled so queries outside this small fictional policy set do not receive unsupported answers. Re-evaluate the threshold and metrics when the knowledge base changes.
+The fixed-character and sentence strategies tie on the measured metrics: fixed-character Precision@3 0.333, Recall@3 1.000; sentence Precision@3 0.333, Recall@3 1.000. Choose sentence-based chunking as a qualitative tie-breaker because it preserves whole sentences. Keep the calibrated fallback enabled and re-evaluate when the knowledge base changes.

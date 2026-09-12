@@ -120,8 +120,8 @@ class KnowledgeBaseIndex:
     def __init__(self, knowledge_base_dir: Path, persist_dir: Path) -> None:
         self.knowledge_base_dir = knowledge_base_dir
         self.client = chromadb.PersistentClient(path=str(persist_dir))
-        # The model runs locally. SentenceTransformers downloads it once if it is not cached.
-        self.model = SentenceTransformer(MODEL_NAME)
+        # The model is cached and loaded locally; this capstone makes no model/API calls.
+        self.model = SentenceTransformer(MODEL_NAME, local_files_only=True)
 
     def _embed(self, texts: Iterable[str]) -> list[list[float]]:
         return self.model.encode(
@@ -365,7 +365,7 @@ def write_report(
         f"- Embedding model: `{MODEL_NAME}` (local SentenceTransformer)",
         f"- Answer strategy: `{ANSWER_STRATEGY}`",
         "- Chroma distance space: `cosine`; displayed score: `1 - distance`",
-        "- Evaluation retrieval depth: 3 chunks per strategy",
+        "- Evaluation retrieval: all ranked chunks, deduplicated to the first 3 parent document IDs",
         "",
         "## Task 4 threshold calibration",
         "",
