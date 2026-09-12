@@ -1,0 +1,66 @@
+{
+  "api-demo": [
+    {
+      "answer": "This is fictional policy content created solely for the Cred capstone and does not describe an actual Cred policy. The monthly installment is calculated from the approved principal, annual interest rate, and selected repayment tenure. Any change to the approved amount or tenure produces a revised installment schedule before disbursal.",
+      "route": "policy_rag",
+      "sources": [
+        "KB-002"
+      ],
+      "masked_input": "How is my EMI calculated?",
+      "thread_id": "api-demo",
+      "error_or_refusal": null
+    },
+    {
+      "answer": "This is fictional policy content created solely for the Cred capstone and does not describe an actual Cred policy. The monthly installment is calculated from the approved principal, annual interest rate, and selected repayment tenure. Any change to the approved amount or tenure produces a revised installment schedule before disbursal.",
+      "route": "policy_rag",
+      "sources": [
+        "KB-002"
+      ],
+      "masked_input": "How is my EMI calculated?",
+      "thread_id": "api-demo",
+      "error_or_refusal": null
+    },
+    {
+      "answer": "This is fictional policy content created solely for the Cred capstone and does not describe an actual Cred policy. The monthly installment is calculated from the approved principal, annual interest rate, and selected repayment tenure. Any change to the approved amount or tenure produces a revised installment schedule before disbursal.",
+      "route": "policy_rag",
+      "sources": [
+        "KB-002"
+      ],
+      "masked_input": "How is my EMI calculated?",
+      "thread_id": "api-demo",
+      "error_or_refusal": null
+    }
+  ],
+  "api-pii": [
+    {
+      "answer": "The sample review process examines transaction evidence and communicates a resolution after the investigation is complete.",
+      "route": "policy_rag",
+      "sources": [
+        "KB-005"
+      ],
+      "masked_input": "Which KYC documents are required? PAN [PAN_REDACTED], Aadhaar [AADHAAR_REDACTED], bank account [BANK_ACCOUNT_REDACTED].",
+      "thread_id": "api-pii",
+      "error_or_refusal": null
+    },
+    {
+      "answer": "The sample review process examines transaction evidence and communicates a resolution after the investigation is complete.",
+      "route": "policy_rag",
+      "sources": [
+        "KB-005"
+      ],
+      "masked_input": "Which KYC documents are required? PAN [PAN_REDACTED], Aadhaar [AADHAAR_REDACTED], bank account [BANK_ACCOUNT_REDACTED].",
+      "thread_id": "api-pii",
+      "error_or_refusal": null
+    },
+    {
+      "answer": "The sample review process examines transaction evidence and communicates a resolution after the investigation is complete.",
+      "route": "policy_rag",
+      "sources": [
+        "KB-005"
+      ],
+      "masked_input": "Which KYC documents are required? PAN [PAN_REDACTED], Aadhaar [AADHAAR_REDACTED], bank account [BANK_ACCOUNT_REDACTED].",
+      "thread_id": "api-pii",
+      "error_or_refusal": null
+    }
+  ]
+}
