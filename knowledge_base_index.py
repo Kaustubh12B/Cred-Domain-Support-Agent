@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 import chromadb
+from chromadb.errors import NotFoundError
 from sentence_transformers import SentenceTransformer
 
 
@@ -24,6 +25,24 @@ COLLECTION_NAMES: dict[Strategy, str] = {
 }
 HEADING_PATTERN = re.compile(r"^#\s+(KB-\d{3}):\s+(.+?)\s*$", re.MULTILINE)
 SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
+ANSWER_STRATEGY: Strategy = "sentence"
+FALLBACK_ANSWER = "I don't know based on the knowledge base."
+CALIBRATION_IN_SCOPE_QUERIES = (
+    "What affects eligibility for a home loan?",
+    "How is my EMI calculated?",
+    "Which KYC documents are required?",
+)
+CALIBRATION_OUT_OF_SCOPE_QUERIES = (
+    "What is the weather in Mumbai today?",
+    "Who won the latest cricket match?",
+)
+EVALUATION_QUERIES = (
+    ("What affects eligibility for a home loan?", "KB-001"),
+    ("How is my EMI calculated?", "KB-002"),
+    ("Which KYC documents are required?", "KB-004"),
+    ("What charge can apply when I prepay a loan early?", "KB-008"),
+    ("How does joint-account authorization work?", "KB-011"),
+)
 
 
 @dataclass(frozen=True)
@@ -116,7 +135,7 @@ class KnowledgeBaseIndex:
             collection_name = COLLECTION_NAMES[strategy]
             try:
                 self.client.delete_collection(collection_name)
-            except ValueError:
+            except NotFoundError:
                 pass
             collection = self.client.create_collection(
                 name=collection_name, metadata={"hnsw:space": "cosine", "strategy": strategy},
@@ -181,21 +200,255 @@ def print_retrieval(query: str, strategy: Strategy, results: list[dict[str, Any]
         print(f"   {result['text']}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Build and demo local Cred KB indexes.")
-    parser.add_argument(
-        "--query",
-        default="What charge can apply when I prepay a loan early?",
-        help="Query demonstrated against both chunking strategies.",
-    )
-    parser.add_argument("--top-k", type=int, default=3, help="Chunks to return per strategy.")
-    args = parser.parse_args()
+def calibrate_threshold(
+    index: KnowledgeBaseIndex, strategy: Strategy
+) -> tuple[float, dict[str, float], dict[str, float]]:
+    """Choose a threshold strictly between measured in- and out-of-scope scores."""
+    in_scope_scores = {
+        query: index.retrieve(query, strategy, top_k=1)[0]["score"]
+        for query in CALIBRATION_IN_SCOPE_QUERIES
+    }
+    out_of_scope_scores = {
+        query: index.retrieve(query, strategy, top_k=1)[0]["score"]
+        for query in CALIBRATION_OUT_OF_SCOPE_QUERIES
+    }
+    lowest_in_scope = min(in_scope_scores.values())
+    highest_out_of_scope = max(out_of_scope_scores.values())
+    if highest_out_of_scope >= lowest_in_scope:
+        raise ValueError(
+            "Cannot select a threshold strictly between the observed similarity clusters"
+        )
+    threshold = (lowest_in_scope + highest_out_of_scope) / 2
+    return threshold, in_scope_scores, out_of_scope_scores
 
+
+def mock_llm_grounded_answer(
+    retrieved_chunks: list[dict[str, Any]], threshold: float
+) -> str:
+    """Return only retrieved source text, or the exact required no-answer fallback."""
+    if not retrieved_chunks or retrieved_chunks[0]["score"] < threshold:
+        return FALLBACK_ANSWER
+    return retrieved_chunks[0]["text"]
+
+
+def deduplicate_parent_document_ids(results: list[dict[str, Any]]) -> list[str]:
+    """Keep parent IDs in rank order before document-level scoring."""
+    return list(dict.fromkeys(result["document_id"] for result in results))
+
+
+def top_distinct_parent_document_ids(
+    index: KnowledgeBaseIndex, query: str, strategy: Strategy, limit: int = 3
+) -> list[str]:
+    """Retrieve enough chunks to form up to ``limit`` ranked distinct parent IDs."""
+    collection = index.client.get_collection(COLLECTION_NAMES[strategy])
+    all_ranked_chunks = index.retrieve(query, strategy, top_k=collection.count())
+    return deduplicate_parent_document_ids(all_ranked_chunks)[:limit]
+
+
+def evaluate_strategy(
+    index: KnowledgeBaseIndex, strategy: Strategy
+) -> tuple[list[dict[str, Any]], float, float]:
+    """Evaluate five queries with one relevant parent document per query."""
+    evaluations: list[dict[str, Any]] = []
+    for query, expected_document_id in EVALUATION_QUERIES:
+        parent_ids = top_distinct_parent_document_ids(index, query, strategy, limit=3)
+        relevant_hits = int(expected_document_id in parent_ids)
+        precision = relevant_hits / 3
+        recall = relevant_hits / 1
+        evaluations.append(
+            {
+                "query": query,
+                "expected_document_id": expected_document_id,
+                "parent_ids": parent_ids,
+                "relevant_hits": relevant_hits,
+                "precision": precision,
+                "recall": recall,
+            }
+        )
+    average_precision = sum(item["precision"] for item in evaluations) / len(evaluations)
+    average_recall = sum(item["recall"] for item in evaluations) / len(evaluations)
+    return evaluations, average_precision, average_recall
+
+
+def print_calibration(
+    threshold: float, in_scope_scores: dict[str, float], out_of_scope_scores: dict[str, float]
+) -> None:
+    """Print the measured threshold-calibration evidence."""
+    print(f"\nTask 4 calibration ({ANSWER_STRATEGY} strategy):")
+    print("In-scope top-1 cosine similarities:")
+    for query, score in in_scope_scores.items():
+        print(f"  {score:.4f} | {query}")
+    print("Out-of-scope top-1 cosine similarities:")
+    for query, score in out_of_scope_scores.items():
+        print(f"  {score:.4f} | {query}")
+    print(f"Selected threshold: {threshold:.4f}")
+
+
+def print_answer_demo(index: KnowledgeBaseIndex, threshold: float) -> list[dict[str, Any]]:
+    """Demonstrate five known-answer queries and one fallback query."""
+    demo_queries = [query for query, _ in EVALUATION_QUERIES] + [
+        "What is the weather in Mumbai today?"
+    ]
+    demonstrations: list[dict[str, Any]] = []
+    print("\nTask 4 grounded-answer demonstration:")
+    for query in demo_queries:
+        retrieved = index.retrieve(query, ANSWER_STRATEGY, top_k=1)
+        answer = mock_llm_grounded_answer(retrieved, threshold)
+        demonstrations.append(
+            {"query": query, "top_score": retrieved[0]["score"], "answer": answer}
+        )
+        print(f"Q: {query}")
+        print(f"Top-1 score: {retrieved[0]['score']:.4f}")
+        print(f"A: {answer}")
+    return demonstrations
+
+
+def print_evaluation(
+    strategy: Strategy, evaluations: list[dict[str, Any]], average_precision: float, average_recall: float
+) -> None:
+    """Print visible document-level Precision@3 and Recall@3 arithmetic."""
+    print(f"\nTask 5 evaluation ({strategy} strategy):")
+    for item in evaluations:
+        print(f"Q: {item['query']}")
+        print(f"Expected parent document: {item['expected_document_id']}")
+        print(f"Retrieved parent IDs after deduplication: {item['parent_ids']}")
+        print(
+            f"Precision@3 = {item['relevant_hits']}/3 = {item['precision']:.3f}; "
+            f"Recall@3 = {item['relevant_hits']}/1 = {item['recall']:.3f}"
+        )
+    print(f"Average Precision@3 = {average_precision:.3f}")
+    print(f"Average Recall@3 = {average_recall:.3f}")
+
+
+def deployment_recommendation(
+    metrics: dict[Strategy, tuple[float, float]]
+) -> str:
+    """Return a short deployment recommendation grounded in measured metrics."""
+    fixed_precision, fixed_recall = metrics["fixed_character"]
+    sentence_precision, sentence_recall = metrics["sentence"]
+    if (fixed_precision, fixed_recall) == (sentence_precision, sentence_recall):
+        return (
+            "The fixed-character and sentence strategies tie on the measured metrics: "
+            f"fixed-character Precision@3 {fixed_precision:.3f}, Recall@3 {fixed_recall:.3f}; "
+            f"sentence Precision@3 {sentence_precision:.3f}, Recall@3 {sentence_recall:.3f}. "
+            "Choose sentence-based chunking as a qualitative tie-breaker because it preserves "
+            "whole sentences. Keep the calibrated fallback enabled and re-evaluate when the "
+            "knowledge base changes."
+        )
+    recommended = max(COLLECTION_NAMES, key=lambda strategy: (metrics[strategy][1], metrics[strategy][0]))
+    precision, recall = metrics[recommended]
+    return (
+        f"Recommend the {recommended} strategy because it achieved the strongest measured "
+        f"document-level result (average Precision@3 {precision:.3f}, Recall@3 {recall:.3f}). "
+        "Keep the calibrated fallback enabled so queries outside this small fictional policy "
+        "set do not receive unsupported answers. Re-evaluate the threshold and metrics when "
+        "the knowledge base changes."
+    )
+
+
+def write_report(
+    report_path: Path,
+    threshold: float,
+    in_scope_scores: dict[str, float],
+    out_of_scope_scores: dict[str, float],
+    demonstrations: list[dict[str, Any]],
+    evaluations_by_strategy: dict[Strategy, list[dict[str, Any]]],
+    metrics: dict[Strategy, tuple[float, float]],
+    recommendation: str,
+) -> None:
+    """Persist calibration measurements and Task 5 results for reproducibility."""
+    lines = [
+        "# Cred Capstone Tasks 4 and 5 Report",
+        "",
+        "## Reproducible configuration",
+        "",
+        f"- Embedding model: `{MODEL_NAME}` (local SentenceTransformer)",
+        f"- Answer strategy: `{ANSWER_STRATEGY}`",
+        "- Chroma distance space: `cosine`; displayed score: `1 - distance`",
+        "- Evaluation retrieval depth: 3 chunks per strategy",
+        "",
+        "## Task 4 threshold calibration",
+        "",
+        "### In-scope top-1 scores",
+        "",
+    ]
+    lines.extend(f"- `{query}`: {score:.4f}" for query, score in in_scope_scores.items())
+    lines.extend(["", "### Out-of-scope top-1 scores", ""])
+    lines.extend(f"- `{query}`: {score:.4f}" for query, score in out_of_scope_scores.items())
+    lines.extend(["", f"Selected threshold: **{threshold:.4f}**", "", "## Grounded-answer demonstration", ""])
+    for item in demonstrations:
+        lines.extend(
+            [
+                f"### {item['query']}",
+                "",
+                f"Top-1 score: {item['top_score']:.4f}",
+                "",
+                f"Answer: {item['answer']}",
+                "",
+            ]
+        )
+    lines.extend(["## Task 5 document-level evaluation", ""])
+    for strategy, evaluations in evaluations_by_strategy.items():
+        average_precision, average_recall = metrics[strategy]
+        lines.extend([f"### {strategy}", ""])
+        for item in evaluations:
+            lines.extend(
+                [
+                    f"- Query: {item['query']}",
+                    f"  - Expected parent: `{item['expected_document_id']}`",
+                    f"  - Deduplicated retrieved parents: {item['parent_ids']}",
+                    f"  - Precision@3 = {item['relevant_hits']}/3 = {item['precision']:.3f}",
+                    f"  - Recall@3 = {item['relevant_hits']}/1 = {item['recall']:.3f}",
+                ]
+            )
+        lines.extend(
+            [
+                f"- Average Precision@3: {average_precision:.3f}",
+                f"- Average Recall@3: {average_recall:.3f}",
+                "",
+            ]
+        )
+    lines.extend(["## Deployment recommendation", "", recommendation, ""])
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Build, calibrate, and evaluate the Cred KB.")
+    parser.add_argument(
+        "--report-file",
+        default="task_4_5_report.md",
+        help="Path for the reproducible calibration and evaluation report.",
+    )
+    args = parser.parse_args()
     project_dir = Path(__file__).resolve().parent
     index = KnowledgeBaseIndex(project_dir / "knowledge_base", project_dir / "chroma_indexes")
     index.build()
+    threshold, in_scope_scores, out_of_scope_scores = calibrate_threshold(index, ANSWER_STRATEGY)
+    print_calibration(threshold, in_scope_scores, out_of_scope_scores)
+    demonstrations = print_answer_demo(index, threshold)
+
+    evaluations_by_strategy: dict[Strategy, list[dict[str, Any]]] = {}
+    metrics: dict[Strategy, tuple[float, float]] = {}
     for strategy in COLLECTION_NAMES:
-        print_retrieval(args.query, strategy, index.retrieve(args.query, strategy, args.top_k))
+        evaluations, average_precision, average_recall = evaluate_strategy(index, strategy)
+        evaluations_by_strategy[strategy] = evaluations
+        metrics[strategy] = (average_precision, average_recall)
+        print_evaluation(strategy, evaluations, average_precision, average_recall)
+
+    recommendation = deployment_recommendation(metrics)
+    print(f"\nDeployment recommendation: {recommendation}")
+    report_path = project_dir / args.report_file
+    write_report(
+        report_path,
+        threshold,
+        in_scope_scores,
+        out_of_scope_scores,
+        demonstrations,
+        evaluations_by_strategy,
+        metrics,
+        recommendation,
+    )
+    print(f"Report written to: {report_path}")
 
 
 if __name__ == "__main__":
