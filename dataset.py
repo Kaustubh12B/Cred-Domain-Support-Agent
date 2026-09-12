@@ -82,6 +82,8 @@ def validate_dataset(records: list[dict[str, Any]]) -> None:
         "flagged_for_fraud_review",
     }
     for record in records:
+        if not isinstance(record, dict):
+            raise ValueError("Each dataset entry must be a dictionary")
         missing_fields = required_fields - record.keys()
         if missing_fields:
             raise ValueError(
@@ -92,10 +94,19 @@ def validate_dataset(records: list[dict[str, Any]]) -> None:
             raise ValueError(f"Invalid category: {record['category']}")
         if record["status"] not in REQUIRED_STATUSES:
             raise ValueError(f"Invalid status: {record['status']}")
+        if (
+            not isinstance(record["loan_amount_inr"], int)
+            or isinstance(record["loan_amount_inr"], bool)
+        ):
+            raise ValueError("loan_amount_inr must be an integer")
         if not MIN_LOAN_AMOUNT_INR <= record["loan_amount_inr"] <= MAX_LOAN_AMOUNT_INR:
             raise ValueError(f"Loan amount is out of range: {record['loan_amount_inr']}")
-        if not isinstance(record["days_since_created"], int) or not (
+        if (
+            not isinstance(record["days_since_created"], int)
+            or isinstance(record["days_since_created"], bool)
+            or not (
             0 <= record["days_since_created"] <= MAX_DAYS_SINCE_CREATED
+            )
         ):
             raise ValueError(
                 f"Invalid days_since_created: {record['days_since_created']}"
@@ -119,6 +130,14 @@ def validate_dataset(records: list[dict[str, Any]]) -> None:
     for status in REQUIRED_STATUSES:
         if status_counts[status] < 1:
             raise ValueError(f"Status coverage failed for {status}")
+
+    fraud_count = sum(record["flagged_for_fraud_review"] for record in records)
+    fraud_percentage = fraud_count / len(records) * 100
+    if not 10 <= fraud_percentage <= 30:
+        raise ValueError(
+            "Fraud-review percentage must be between 10% and 30%; "
+            f"found {fraud_percentage:.2f}%"
+        )
 
 
 LOAN_APPLICATIONS = _build_dataset()
