@@ -8,11 +8,11 @@ without an LLM key or external model provider.
 
 - Seed: `20260912`; records: `50`.
 - Categories: Personal, Home, Auto, Education, and Business loans are each seeded
-  at least three times, remaining categories are sampled from that set, and the
-  combined list is deterministically shuffled.
+  at least three times; the remaining 35 records use equal weights of `1/5` for
+  each required category, then the combined list is deterministically shuffled.
 - Statuses: Submitted, Under Review, Approved, Rejected, and Disbursed are each
-  seeded once, remaining statuses are sampled from that set, and the list is
-  deterministically shuffled.
+  seeded once; the remaining 45 records use equal weights of `1/5` for each
+  required status, then the list is deterministically shuffled.
 - Loan amount range: **₹75,000–₹50,00,000**. This spans small unsecured borrowing
   through substantial secured lending while remaining suitable for a compact demo.
 - Fraud-review probability: `18%`; the seeded output observes `14%` (`7/50`) fraud

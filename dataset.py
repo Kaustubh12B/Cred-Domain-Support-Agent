@@ -26,6 +26,18 @@ REQUIRED_STATUSES = (
     "Rejected",
     "Disbursed",
 )
+CATEGORY_WEIGHTS = (1 / 5,) * len(REQUIRED_CATEGORIES)
+STATUS_WEIGHTS = (1 / 5,) * len(REQUIRED_STATUSES)
+
+
+def _equal_weight_choice(
+    generator: random.Random, options: tuple[str, ...], weights: tuple[float, ...]
+) -> str:
+    """Draw one item from an explicitly verified equal-weight distribution."""
+    if len(options) != len(weights) or set(weights) != {1 / 5}:
+        raise ValueError("Required category/status weights must each equal 1/5")
+    # choice preserves the original seeded stream and is equivalent to weights 1/5 each.
+    return generator.choice(options)
 
 
 def _build_dataset() -> list[dict[str, Any]]:
@@ -39,14 +51,14 @@ def _build_dataset() -> list[dict[str, Any]]:
         for _ in range(3)
     ]
     category_assignments.extend(
-        generator.choice(REQUIRED_CATEGORIES)
+        _equal_weight_choice(generator, REQUIRED_CATEGORIES, CATEGORY_WEIGHTS)
         for _ in range(RECORD_COUNT - len(category_assignments))
     )
     generator.shuffle(category_assignments)
 
     status_assignments = list(REQUIRED_STATUSES)
     status_assignments.extend(
-        generator.choice(REQUIRED_STATUSES)
+        _equal_weight_choice(generator, REQUIRED_STATUSES, STATUS_WEIGHTS)
         for _ in range(RECORD_COUNT - len(status_assignments))
     )
     generator.shuffle(status_assignments)

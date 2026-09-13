@@ -2,9 +2,9 @@
 
 | Tasks | Source | Evidence |
 | --- | --- | --- |
-| 1 | `dataset.py` | deterministic generated `LOAN_APPLICATIONS`; `task_6_report.md` |
-| 2 | `dataset.py` | `validate_dataset`; dataset module output |
-| 3 | `dataset.py` | deterministic category/status/fraud coverage validation |
+| 1 | `dataset.py` | deterministic generated `LOAN_APPLICATIONS`; direct `python dataset.py` report |
+| 2 | `knowledge_base/` | 12 fictional policy Markdown documents plus `knowledge_base/README.md` |
+| 3 | `knowledge_base_index.py` | two separate ChromaDB collections and retrieval demonstration |
 | 4 | `knowledge_base_index.py`, `knowledge_base/` | `task_4_5_report.md` |
 | 5 | `knowledge_base_index.py` | `task_4_5_report.md` |
 | 6 | `loan_application_status.py` | `task_6_report.md` |
