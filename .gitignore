@@ -1,0 +1,9 @@
+**/__pycache__/
+*.pyc
+.venv/
+.env
+chroma_indexes/
+*.sqlite
+*.jsonl
+api_demo_memory.json
+api_thread_memory.json
