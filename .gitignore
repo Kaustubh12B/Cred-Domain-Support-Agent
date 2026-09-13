@@ -7,3 +7,4 @@ chroma_indexes/
 *.jsonl
 api_demo_memory.json
 api_thread_memory.json
+*_memory.json
