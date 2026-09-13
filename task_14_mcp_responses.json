@@ -1,0 +1,28 @@
+[
+  {
+    "tool": "get_loan_status",
+    "arguments": {
+      "record_id": "LA-001"
+    },
+    "is_error": false,
+    "structured_content": {
+      "record_id": "LA-001",
+      "status": "Approved",
+      "loan_amount_inr": 1579678,
+      "escalation_score": 0.18999999999999997
+    }
+  },
+  {
+    "tool": "get_loan_status",
+    "arguments": {
+      "record_id": "LA-002"
+    },
+    "is_error": false,
+    "structured_content": {
+      "record_id": "LA-002",
+      "status": "Approved",
+      "loan_amount_inr": 4876353,
+      "escalation_score": 0.9099999999999999
+    }
+  }
+]
